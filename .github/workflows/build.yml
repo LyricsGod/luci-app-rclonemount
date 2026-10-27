@@ -1,0 +1,57 @@
+name: Build ipk
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: 打包 luci-app-rclonemount
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 推导版本号
+        id: ver
+        run: |
+          if [ "${GITHUB_REF#refs/tags/}" != "$GITHUB_REF" ] && [ "${GITHUB_REF#refs/tags/v}" != "$GITHUB_REF" ]; then
+            VER="${GITHUB_REF#refs/tags/v}"
+          else
+            VER="1.0"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "版本号: $VER"
+
+      - name: 构建 ipk
+        run: |
+          chmod +x build-ipk.sh
+          PKG_VERSION="${{ steps.ver.outputs.version }}" sh build-ipk.sh
+
+      - name: 校验包结构
+        run: |
+          for f in build/*.ipk; do
+            echo "=== $f ==="
+            tar tzf "$f" | sort
+          done
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-rclonemount-ipk
+          path: build/*.ipk
+          if-no-files-found: error
+
+      - name: 发布到 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/*.ipk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
