@@ -1,0 +1,38 @@
+#!/bin/sh /etc/rc.common
+# ============================================================
+# rclonemount 服务
+#   /etc/init.d/rclonemount {start|stop|restart|reload|status}
+#   /etc/init.d/rclonemount enable   # 加入开机启动
+#
+# reload = 刷新目录缓存（等同 rclonemount refresh）
+# ============================================================
+
+START=95
+STOP=10
+
+SCRIPT=/usr/bin/rclonemount
+
+start() {
+	$SCRIPT start
+}
+
+stop() {
+	$SCRIPT stop
+}
+
+restart() {
+	$SCRIPT restart
+}
+
+reload() {
+	$SCRIPT refresh
+}
+
+status() {
+	$SCRIPT status
+}
+
+# 开机时后台执行：挂载过程要等 OpenList 就绪，不能阻塞系统启动
+boot() {
+	($SCRIPT start >/dev/null 2>&1 &)
+}

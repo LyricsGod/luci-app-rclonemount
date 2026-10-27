@@ -1,0 +1,240 @@
+<%+header%>
+
+<h2><%:Rclone 网盘挂载%></h2>
+
+<div class="cbi-map">
+
+	<fieldset class="cbi-section">
+		<legend><%:挂载状态%></legend>
+		<div class="cbi-section-node">
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:当前状态%></label>
+				<div class="cbi-value-field">
+					<% if info.mounted then %>
+						<span style="color:#0a0;font-weight:bold">● <%:已挂载%></span>
+					<% else %>
+						<span style="color:#c00;font-weight:bold">● <%:未挂载%></span>
+						<% if info.enabled ~= "1" then %>
+							<span class="cbi-value-description">（<%:配置里已停用%>）</span>
+						<% end %>
+					<% end %>
+				</div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:Remote%></label>
+				<div class="cbi-value-field"><%=info.remote%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:挂载点%></label>
+				<div class="cbi-value-field"><%=info.mountpoint%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:文件系统%></label>
+				<div class="cbi-value-field"><%=info.fstype%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:读写模式%></label>
+				<div class="cbi-value-field">
+					<% if info.ro then %><%:只读%> (ro)<% else %><%:读写%> (rw)<% end %>
+				</div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:允许其他用户访问%></label>
+				<div class="cbi-value-field"><% if info.allowother then %><%:是%><% else %><%:否%><% end %></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:进程 PID%></label>
+				<div class="cbi-value-field"><% if info.pid ~= "" then %><%=info.pid%><% else %>-<% end %></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:进程内存%></label>
+				<div class="cbi-value-field"><%=info.mem%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:已运行%></label>
+				<div class="cbi-value-field"><%=info.runtime%></div>
+			</div>
+
+		</div>
+	</fieldset>
+
+	<fieldset class="cbi-section">
+		<legend><%:当前生效的配置%></legend>
+		<div class="cbi-section-node">
+
+			<div class="cbi-value">
+				<label class="cbi-value-title">WebDAV <%:地址%></label>
+				<div class="cbi-value-field">
+					<%=info.wdurl%>
+					<% if info.wdsync == "1" then %>
+						<span class="cbi-value-description">（<%:启动时自动同步到 rclone.conf%>）</span>
+					<% end %>
+				</div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:缓存目录%></label>
+				<div class="cbi-value-field"><%=info.cachedir%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:缓存上限%></label>
+				<div class="cbi-value-field"><%=info.cachemax%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:目录缓存时间%></label>
+				<div class="cbi-value-field"><%=info.dircache%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:每秒请求上限%></label>
+				<div class="cbi-value-field"><%=info.tpslimit%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:挂载点顶层目录%></label>
+				<div class="cbi-value-field"><%=info.topdirs%></div>
+			</div>
+
+			<div class="cbi-value cbi-value-last">
+				<label class="cbi-value-title"></label>
+				<div class="cbi-value-field">
+					<a class="cbi-button" href="<%=url('admin/status/rclonemount/config')%>"><%:修改配置%></a>
+				</div>
+			</div>
+
+		</div>
+	</fieldset>
+
+	<fieldset class="cbi-section">
+		<legend><%:存储与依赖服务%></legend>
+		<div class="cbi-section-node">
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:缓存占用%></label>
+				<div class="cbi-value-field"><%=info.cache%> <span class="cbi-value-description">(<%:上限%> <%=info.cachemax%>)</span></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:磁盘剩余 / 总量%></label>
+				<div class="cbi-value-field"><%=info.diskfree%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:日志文件%></label>
+				<div class="cbi-value-field"><%=info.logsize%> <span class="cbi-value-description">(<%:更新于%> <%=info.logupd%>)</span></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title">OpenList</label>
+				<div class="cbi-value-field">
+					<% if info.openlist == "在线" then %>
+						<span style="color:#0a0">● <%:在线%></span>
+					<% else %>
+						<span style="color:#c00">● <%:未运行%></span>
+					<% end %>
+				</div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title">Jellyfin</label>
+				<div class="cbi-value-field"><%=info.jellyfin%></div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:定时刷新%></label>
+				<div class="cbi-value-field">
+					<% if info.cron then %><%:已启用 每天 4:00 刷新目录缓存、4:10 轮转日志%>
+					<% else %><%:未启用%><% end %>
+				</div>
+			</div>
+
+		</div>
+	</fieldset>
+
+	<fieldset class="cbi-section">
+		<legend><%:操作%></legend>
+		<div class="cbi-section-node">
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:刷新目录缓存%></label>
+				<div class="cbi-value-field">
+					<form method="post" action="<%=url('admin/status/rclonemount/refresh')%>" style="display:inline">
+						<input type="hidden" name="token" value="<%=token or ''%>"/>
+						<input type="submit" class="cbi-button cbi-button-apply" value="<%:立即刷新%>"/>
+					</form>
+					<div class="cbi-value-description">
+						<%:网盘里新增了片子但 Jellyfin 扫不到时点这个。%><%:只清目录缓存，不重新挂载，几秒内完成。%>
+					</div>
+				</div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:重新挂载%></label>
+				<div class="cbi-value-field">
+					<form method="post" action="<%=url('admin/status/rclonemount/remount')%>" style="display:inline"
+					      onsubmit="return confirm('<%:将重新挂载，配置改动才会生效。Jellyfin 容器的播放会中断约 30 秒，确定继续？%>')">
+						<input type="hidden" name="token" value="<%=token or ''%>"/>
+						<input type="submit" class="cbi-button cbi-button-apply" value="<%:重新挂载%>"/>
+					</form>
+					<div class="cbi-value-description">
+						<%:改完配置后点这个生效。会自动重启 Jellyfin 容器。%>
+					</div>
+				</div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:重启 Jellyfin%></label>
+				<div class="cbi-value-field">
+					<form method="post" action="<%=url('admin/status/rclonemount/jellyfin')%>" style="display:inline"
+					      onsubmit="return confirm('<%:确定重启 Jellyfin 容器？%>')">
+						<input type="hidden" name="token" value="<%=token or ''%>"/>
+						<input type="submit" class="cbi-button cbi-button-action" value="<%:重启容器%>"/>
+					</form>
+					<div class="cbi-value-description">
+						<%:容器内访问网盘报 “Transport endpoint is not connected” 时用这个修复。%>
+					</div>
+				</div>
+			</div>
+
+			<div class="cbi-value">
+				<label class="cbi-value-title"><%:卸载%></label>
+				<div class="cbi-value-field">
+					<form method="post" action="<%=url('admin/status/rclonemount/umount')%>" style="display:inline"
+					      onsubmit="return confirm('<%:确定卸载网盘？卸载后 Jellyfin 将读取不到网盘内容。%>')">
+						<input type="hidden" name="token" value="<%=token or ''%>"/>
+						<input type="submit" class="cbi-button cbi-button-negative" value="<%:卸载%>"/>
+					</form>
+					<div class="cbi-value-description">
+						<%:仅卸载不删除任何数据，需要时用「重新挂载」恢复。%>
+					</div>
+				</div>
+			</div>
+
+		</div>
+	</fieldset>
+
+	<fieldset class="cbi-section">
+		<legend><%:最近日志%></legend>
+		<div class="cbi-section-node">
+			<div class="cbi-value">
+				<div class="cbi-value-field">
+<pre style="margin:0;white-space:pre-wrap;word-break:break-all;font-size:12px"><%=info.logtail%></pre>
+				</div>
+			</div>
+		</div>
+	</fieldset>
+
+</div>
+
+<%+footer%>

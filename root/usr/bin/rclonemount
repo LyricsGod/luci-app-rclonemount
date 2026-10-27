@@ -1,0 +1,291 @@
+#!/bin/sh
+# ============================================================
+# rclonemount - 网盘挂载控制脚本
+#   网盘 -> Alist/OpenList(WebDAV) -> rclone mount -> Jellyfin
+#
+# 用法: rclonemount {start|stop|restart|refresh|status}
+#
+# 所有参数从 /etc/config/rclonemount 读取，带默认值兜底，
+# 因此即使配置文件缺失也能正常启动。
+# ============================================================
+
+UCI_ROOT="rclonemount"
+PIDFILE="/var/run/rclonemount.pid"
+
+log() {
+	logger -t rclonemount "$@" 2>/dev/null || echo "[rclonemount] $*"
+}
+
+# cfg <section> <option> <默认值>
+cfg() {
+	local v
+	v=$(uci -q get "${UCI_ROOT}.$1.$2" 2>/dev/null)
+	if [ -n "$v" ]; then echo "$v"; else echo "$3"; fi
+}
+
+load_conf() {
+	# --- 基础 ---
+	ENABLED=$(cfg main enabled 1)
+	REMOTE=$(cfg main remote "alist:")
+	MOUNTPOINT=$(cfg main mountpoint "/mnt/nvme0n1p5/Alist")
+	RCLONE_CFG=$(cfg main rclone_config "/root/.config/rclone/rclone.conf")
+	CACHEDIR=$(cfg main cachedir "/mnt/nvme0n1p5/Caches/Rclone")
+	LOGFILE=$(cfg main logfile "/mnt/nvme0n1p5/Logs/rclone-alist.log")
+	ALIST_URL=$(cfg main alist_url "http://127.0.0.1:5244")
+
+	# remote 名可能是 "alist:" 或 "alist:/子目录"，section 名只取冒号前
+	SEC=$(echo "$REMOTE" | cut -d: -f1)
+
+	# --- WebDAV ---
+	WD_SYNC=$(cfg webdav sync 1)
+	WD_URL=$(cfg webdav url "")
+	WD_VENDOR=$(cfg webdav vendor "other")
+	WD_USER=$(cfg webdav user "")
+	WD_PASS=$(cfg webdav pass "")
+
+	# --- 缓存与读取 ---
+	CACHE_MAX=$(cfg cache max_size "20G")
+	CACHE_MIN_FREE=$(cfg cache min_free "5G")
+	CACHE_MAX_AGE=$(cfg cache max_age "72h")
+	READ_AHEAD=$(cfg cache read_ahead "128M")
+	BUFFER_SIZE=$(cfg cache buffer_size "32M")
+	CHUNK_SIZE=$(cfg cache chunk_size "32M")
+	CHUNK_LIMIT=$(cfg cache chunk_limit "128M")
+	DIR_CACHE=$(cfg cache dir_cache_time "72h")
+	ATTR_TIMEOUT=$(cfg cache attr_timeout "1h")
+
+	# --- 并发与重试 ---
+	TRANSFERS=$(cfg network transfers "4")
+	CHECKERS=$(cfg network checkers "8")
+	TPSLIMIT=$(cfg network tpslimit "8")
+	TPSLIMIT_BURST=$(cfg network tpslimit_burst "16")
+	TIMEOUT=$(cfg network timeout "5m")
+	RETRIES=$(cfg network retries "3")
+	RETRIES_SLEEP=$(cfg network retries_sleep "3s")
+	LLR=$(cfg network low_level_retries "10")
+	LOG_LEVEL=$(cfg network log_level "INFO")
+
+	# --- 挂载选项 ---
+	READ_ONLY=$(cfg mountopts read_only "1")
+	ALLOW_OTHER=$(cfg mountopts allow_other "1")
+	ALLOW_NON_EMPTY=$(cfg mountopts allow_non_empty "1")
+	USE_MMAP=$(cfg mountopts use_mmap "1")
+	NO_REFERER=$(cfg mountopts no_referer "1")
+
+	# --- Jellyfin ---
+	JF_ENABLED=$(cfg jellyfin enabled "1")
+	JF_CONTAINER=$(cfg jellyfin container "jellyfin")
+	JF_RESTART=$(cfg jellyfin restart_after_mount "1")
+}
+
+is_mounted() {
+	awk -v m="$MOUNTPOINT" '$2==m{found=1} END{exit !found}' /proc/mounts 2>/dev/null
+}
+
+# 探测根路径。不能用 /dav/：WebDAV 路径对 GET/HEAD 回 401/405，会误判服务不可用
+http_ok() {
+	if command -v curl >/dev/null 2>&1; then
+		curl -sf -o /dev/null --max-time 3 "$1"
+	else
+		pgrep -f "openlist server" >/dev/null 2>&1
+	fi
+}
+
+wait_alist() {
+	local i=0
+	while [ $i -lt 60 ]; do
+		http_ok "${ALIST_URL}/" && return 0
+		i=$((i + 1))
+		sleep 2
+	done
+	return 1
+}
+
+# 把界面上填的 WebDAV 地址/账号写回 rclone.conf
+# 密码留空时保留原来的，避免每次保存都得重填
+sync_webdav() {
+	[ "$WD_SYNC" = "1" ] || return 0
+	[ -n "$WD_URL" ] || return 0
+
+	mkdir -p "$(dirname "$RCLONE_CFG")" 2>/dev/null
+	[ -f "$RCLONE_CFG" ] || : > "$RCLONE_CFG"
+
+	local oldpass newpass
+	oldpass=$(sed -n "/^\[${SEC}\]/,/^\[/p" "$RCLONE_CFG" 2>/dev/null \
+		| grep -m1 '^[[:space:]]*pass[[:space:]]*=' \
+		| sed 's/^[^=]*=[[:space:]]*//')
+
+	# 删除旧的 [SEC] 段
+	awk -v s="[${SEC}]" '
+		index($0, s) == 1 { skip = 1; next }
+		/^\[/            { skip = 0 }
+		!skip
+	' "$RCLONE_CFG" > "${RCLONE_CFG}.tmp" 2>/dev/null
+	[ -f "${RCLONE_CFG}.tmp" ] && mv "${RCLONE_CFG}.tmp" "$RCLONE_CFG"
+
+	{
+		echo "[${SEC}]"
+		echo "type = webdav"
+		echo "url = ${WD_URL}"
+		echo "vendor = ${WD_VENDOR}"
+		[ -n "$WD_USER" ] && echo "user = ${WD_USER}"
+		if [ -n "$WD_PASS" ]; then
+			# 界面上填的是明文，需要混淆后再写入
+			echo "pass = $(rclone obscure "$WD_PASS" 2>/dev/null)"
+		elif [ -n "$oldpass" ]; then
+			# 关键：rclone.conf 里存的就是混淆后的密文，必须原样写回。
+			# 再跑一次 rclone obscure 会变成「密文的密文」，直接导致 401。
+			echo "pass = $oldpass"
+		fi
+	} >> "$RCLONE_CFG"
+
+	log "已同步 WebDAV 配置到 ${RCLONE_CFG} (${WD_URL})"
+}
+
+build_flags() {
+	FLAGS=""
+	[ "$ALLOW_OTHER" = "1" ]     && FLAGS="$FLAGS --allow-other"
+	[ "$ALLOW_NON_EMPTY" = "1" ] && FLAGS="$FLAGS --allow-non-empty"
+	[ "$READ_ONLY" = "1" ]       && FLAGS="$FLAGS --read-only"
+	[ "$USE_MMAP" = "1" ]        && FLAGS="$FLAGS --use-mmap"
+	[ "$NO_REFERER" = "1" ]      && FLAGS="$FLAGS --header Referer:"
+}
+
+do_start() {
+	load_conf
+
+	# 清除「主动卸载」标记，让看门狗恢复工作
+	rm -f /var/run/rclonemount.stopped
+
+	if [ "$ENABLED" != "1" ]; then
+		log "已在配置中停用，跳过挂载"
+		return 0
+	fi
+
+	mkdir -p "$MOUNTPOINT" "$CACHEDIR" "$(dirname "$LOGFILE")" 2>/dev/null
+
+	# --allow-other 依赖 /etc/fuse.conf 里的 user_allow_other
+	if [ "$ALLOW_OTHER" = "1" ]; then
+		grep -q "^user_allow_other" /etc/fuse.conf 2>/dev/null \
+			|| echo "user_allow_other" >> /etc/fuse.conf 2>/dev/null
+	fi
+
+	sync_webdav
+	http_ok "${ALIST_URL}/" || wait_alist
+
+	# 清理上一次的残留
+	if is_mounted; then
+		log "检测到已挂载，先卸载"
+		umount -l "$MOUNTPOINT" 2>/dev/null
+		sleep 2
+	fi
+	for p in $(pgrep -f "rclone mount ${REMOTE}"); do
+		kill -9 "$p" 2>/dev/null
+	done
+	sleep 1
+
+	build_flags
+
+	rclone mount "$REMOTE" "$MOUNTPOINT" \
+		--config "$RCLONE_CFG" \
+		--umask 0022 \
+		--vfs-cache-mode full \
+		--cache-dir "$CACHEDIR" \
+		--vfs-cache-max-size "$CACHE_MAX" \
+		--vfs-cache-min-free-space "$CACHE_MIN_FREE" \
+		--vfs-cache-max-age "$CACHE_MAX_AGE" \
+		--vfs-cache-poll-interval 1m \
+		--vfs-read-ahead "$READ_AHEAD" \
+		--buffer-size "$BUFFER_SIZE" \
+		--vfs-read-chunk-size "$CHUNK_SIZE" \
+		--vfs-read-chunk-size-limit "$CHUNK_LIMIT" \
+		--dir-cache-time "$DIR_CACHE" \
+		--attr-timeout "$ATTR_TIMEOUT" \
+		--poll-interval 0 \
+		--transfers "$TRANSFERS" \
+		--checkers "$CHECKERS" \
+		--tpslimit "$TPSLIMIT" \
+		--tpslimit-burst "$TPSLIMIT_BURST" \
+		--timeout "$TIMEOUT" \
+		--contimeout 30s \
+		--retries "$RETRIES" \
+		--retries-sleep "$RETRIES_SLEEP" \
+		--low-level-retries "$LLR" \
+		--log-level "$LOG_LEVEL" \
+		--log-file "$LOGFILE" \
+		$FLAGS \
+		--daemon
+
+	sleep 3
+	if is_mounted; then
+		log "挂载成功：$REMOTE -> $MOUNTPOINT"
+		MOUNT_PID=$(pgrep -f "rclone mount ${REMOTE}" | head -1)
+		[ -n "$MOUNT_PID" ] && echo "$MOUNT_PID" > "$PIDFILE"
+
+		# 容器先于本脚本启动，绑的是挂载前的旧实例，不重启会报
+		# "Transport endpoint is not connected"
+		if [ "$JF_ENABLED" = "1" ] && [ "$JF_RESTART" = "1" ] && [ -n "$JF_CONTAINER" ]; then
+			(docker restart "$JF_CONTAINER" >/dev/null 2>&1 &)
+			log "已触发重启容器：$JF_CONTAINER"
+		fi
+	else
+		log "挂载失败，详见 $LOGFILE"
+		return 1
+	fi
+}
+
+do_stop() {
+	load_conf
+	if is_mounted; then
+		umount -l "$MOUNTPOINT" 2>/dev/null
+		sleep 2
+	fi
+	for p in $(pgrep -f "rclone mount ${REMOTE}"); do
+		kill -9 "$p" 2>/dev/null
+	done
+	rm -f "$PIDFILE"
+	# 打上标记，避免看门狗把「主动卸载」又当成崩溃给挂回去
+	touch /var/run/rclonemount.stopped
+	log "已卸载 $MOUNTPOINT"
+}
+
+do_refresh() {
+	local pid
+	pid=$(cat "$PIDFILE" 2>/dev/null | tr -d '\n')
+	if [ -z "$pid" ]; then
+		load_conf
+		pid=$(pgrep -f "rclone mount ${REMOTE}" | head -1)
+	fi
+	if [ -n "$pid" ] && kill -HUP "$pid" 2>/dev/null; then
+		log "已刷新目录缓存 (PID $pid)"
+	else
+		echo "未找到挂载进程，请先启动"
+		return 1
+	fi
+}
+
+do_status() {
+	load_conf
+	if is_mounted; then
+		echo "已挂载：$REMOTE -> $MOUNTPOINT"
+		awk -v m="$MOUNTPOINT" '$2==m{print "  类型: "$3; print "  选项: "$4}' /proc/mounts
+		echo "  PID : $(cat $PIDFILE 2>/dev/null)"
+		[ -f "$LOGFILE" ] && echo "  日志: $LOGFILE ($(ls -lh "$LOGFILE" | awk '{print $5}'))"
+	else
+		echo "未挂载"
+		return 1
+	fi
+}
+
+case "$1" in
+	start)     do_start ;;
+	stop)      do_stop ;;
+	restart)   do_stop; sleep 1; do_start ;;
+	refresh|reload) do_refresh ;;
+	status)    do_status ;;
+	sync)      load_conf; sync_webdav ;;
+	*)
+		echo "用法: $0 {start|stop|restart|refresh|status|sync}"
+		exit 1
+		;;
+esac

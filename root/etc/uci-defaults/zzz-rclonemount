@@ -1,0 +1,32 @@
+#!/bin/sh
+# 首次启动时执行一次，随后自动删除（必须以 exit 0 结束）
+
+# 开机自动挂载
+if [ -x /etc/init.d/rclonemount ]; then
+	/etc/init.d/rclonemount enable
+fi
+
+# 定时任务：每天刷新目录缓存 + 轮转日志
+LOG=$(uci -q get rclonemount.main.logfile 2>/dev/null)
+[ -z "$LOG" ] && LOG="/mnt/nvme0n1p5/Logs/rclone-alist.log"
+
+touch /etc/crontabs/root
+if ! grep -q 'rclonemount refresh' /etc/crontabs/root 2>/dev/null; then
+	cat >> /etc/crontabs/root <<EOF
+0 4 * * * /usr/bin/rclonemount refresh
+10 4 * * * cp $LOG $LOG.1 2>/dev/null; > $LOG 2>/dev/null
+EOF
+fi
+
+# 看门狗：挂载掉了就自动挂回去。
+# 主动执行过 stop 会留下标记文件，那种情况不自动恢复。
+if ! grep -q 'rclonemount.stopped' /etc/crontabs/root 2>/dev/null; then
+	cat >> /etc/crontabs/root <<'EOF'
+*/10 * * * * [ -f /var/run/rclonemount.stopped ] || (/usr/bin/rclonemount status >/dev/null 2>&1 || /usr/bin/rclonemount start >/dev/null 2>&1)
+EOF
+fi
+
+# 服务存在才重启 cron
+[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1
+
+exit 0
