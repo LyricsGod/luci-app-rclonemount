@@ -116,10 +116,14 @@ uci commit rclonemount
 
 ## 依赖
 
-- `rclone`（必需）
-- `fuse-utils` / 内核 FUSE 支持（必需）
+- `rclone` 与 `luci-base`（必需）
+- 内核 FUSE 支持（`kmod-fuse`）+ `fuse3-utils` —— 一般系统已自带，可先确认
+  `ls /dev/fuse && opkg list-installed | grep fuse`
 - Alist 或 OpenList（提供 WebDAV）
 - Docker + Jellyfin（可选，用于「挂载后重启容器」）
+
+> 注意：依赖里**不要**声明 `fuse-utils`（fuse 2.x 的旧包），现在系统基本都是 fuse3，
+> 声明它反而会因为源索引校验失败导致装不上。
 
 ## 几个设计上的坑
 
