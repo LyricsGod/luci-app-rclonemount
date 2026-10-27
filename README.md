@@ -140,6 +140,39 @@ uci commit rclonemount
 6. **LuCI 里 `string.gsub` 返回两个值**：直接 `tonumber(sh(...))` 会把替换次数
    当成进制基数报错，`sh()` 里用外层括号截断成单值。
 
+## 排障：WebDAV 全部返回 429，但 OpenList 网页能正常访问
+
+现象：rclone 挂载读不到任何内容，日志刷 `429 Too Many Requests`，
+可 OpenList 网页端浏览网盘却一切正常 —— 看起来像网盘被限流，其实不是。
+
+**一条命令就能区分**，用错误密码访问 WebDAV：
+
+```sh
+curl -u 用户名:故意写错的密码 -X PROPFIND -H 'Depth: 1' http://127.0.0.1:5244/dav/
+```
+
+- 返回 **429** → 请求在认证之前就被拦了，是 OpenList 对 `/dav/` 的限流，跟网盘无关
+- 返回 **401** → 认证链路正常，问题在别处
+
+也可以直接看 OpenList 日志，对比来源 IP：
+
+```
+429 | 127.0.0.1     | PROPFIND "/dav/"   ← rclone 走的，被限流
+207 | 192.168.2.170 | PROPFIND "/dav/"   ← 浏览器走的，正常
+```
+
+**原因**：OpenList 对 `/dav/` 有按 IP 的限流钩子，rclone 的高频请求触发后，
+计数不会自动恢复，于是所有来自该 IP 的 WebDAV 请求（连错误密码的也是）一律 429。
+
+**解决**：
+
+```sh
+/etc/init.d/openlist restart   # 重启 OpenList 重置限流
+```
+
+同时把 `network.tpslimit` 调低（默认 8，遇到限流可降到 5 或 3），减少触发概率。
+必要时去 OpenList 后台调整或关闭 WebDAV 限流。
+
 ## 关于 Jellyfin
 
 光有挂载不够，刮削慢的元凶常在 Jellyfin 这边，建议：
