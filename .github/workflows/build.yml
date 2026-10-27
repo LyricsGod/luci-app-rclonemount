@@ -8,6 +8,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 默认的 GITHUB_TOKEN 是只读的，发布 Release 会 401，必须显式给写权限
+permissions:
+  contents: write
+
 jobs:
   build:
     name: 打包 luci-app-rclonemount
