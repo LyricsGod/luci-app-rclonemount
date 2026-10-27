@@ -86,6 +86,11 @@ chmod 755 /usr/bin/rclonemount /etc/init.d/rclonemount 2>/dev/null
 rm -rf /tmp/luci-indexcache /tmp/luci-modulecache
 if [ -z "$IPKG_INSTROOT" ]; then
 	/etc/init.d/rclonemount enable
+	# 升级时 prerm 会先 stop，装完这里要主动挂回去，
+	# 否则用户升级完发现网盘没了（配置里停用的除外）
+	if [ "$(uci -q get rclonemount.main.enabled)" = "1" ]; then
+		/etc/init.d/rclonemount start
+	fi
 fi
 exit 0
 EOF
