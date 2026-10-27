@@ -115,6 +115,9 @@ sync_webdav() {
 		| grep -m1 '^[[:space:]]*pass[[:space:]]*=' \
 		| sed 's/^[^=]*=[[:space:]]*//')
 
+	# 动配置前先备份，写坏了能一键找回
+	cp "$RCLONE_CFG" "${RCLONE_CFG}.bak.sync" 2>/dev/null
+
 	# 删除旧的 [SEC] 段
 	awk -v s="[${SEC}]" '
 		index($0, s) == 1 { skip = 1; next }
@@ -129,12 +132,20 @@ sync_webdav() {
 		echo "url = ${WD_URL}"
 		echo "vendor = ${WD_VENDOR}"
 		[ -n "$WD_USER" ] && echo "user = ${WD_USER}"
+		# 关键：rclone.conf 里存的就是混淆后的密文。
+		# 只有界面新填的明文才需要 obscure，原密码必须原样写回 ——
+		# 再跑一次 rclone obscure 会变成「密文的密文」，直接导致 401。
 		if [ -n "$WD_PASS" ]; then
-			# 界面上填的是明文，需要混淆后再写入
-			echo "pass = $(rclone obscure "$WD_PASS" 2>/dev/null)"
+			local enc
+			enc=$(rclone obscure "$WD_PASS" 2>/dev/null)
+			if [ -n "$enc" ]; then
+				echo "pass = $enc"
+			elif [ -n "$oldpass" ]; then
+				# 混淆失败就退回原密码，绝不写空值把认证弄坏
+				log "警告：密码混淆失败，保留原有密码"
+				echo "pass = $oldpass"
+			fi
 		elif [ -n "$oldpass" ]; then
-			# 关键：rclone.conf 里存的就是混淆后的密文，必须原样写回。
-			# 再跑一次 rclone obscure 会变成「密文的密文」，直接导致 401。
 			echo "pass = $oldpass"
 		fi
 	} >> "$RCLONE_CFG"
