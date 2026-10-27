@@ -88,8 +88,9 @@ if [ -z "$IPKG_INSTROOT" ]; then
 	/etc/init.d/rclonemount enable
 	# 升级时 prerm 会先 stop，装完这里要主动挂回去，
 	# 否则用户升级完发现网盘没了（配置里停用的除外）
+	# 必须后台跑：挂载要等 OpenList 就绪，同步执行会把 opkg 安装流程整个卡住
 	if [ "$(uci -q get rclonemount.main.enabled)" = "1" ]; then
-		/etc/init.d/rclonemount start
+		(/etc/init.d/rclonemount start >/dev/null 2>&1 &)
 	fi
 fi
 exit 0
