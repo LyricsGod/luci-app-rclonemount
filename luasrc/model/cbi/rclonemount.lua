@@ -106,6 +106,10 @@ o.description = translate("调大能大幅减少刮削时的目录请求。新�
 o = s:option(Value, "attr_timeout", translate("属性缓存时间"))
 o.default = "1h"
 
+o = s:option(Value, "poll_interval", translate("缓存巡检间隔"))
+o.default = "1m"
+o.description = translate("rclone 检查并清理缓存的间隔。日志级别为 INFO 时，这个间隔决定了「vfs cache: cleaned」报告刷屏的频率，嫌吵就调大或把日志级别改成 NOTICE")
+
 -- ============================ 并发与重试 ============================
 s = m:section(NamedSection, "network", "network", translate("并发与重试"))
 s.addremove = false
