@@ -24,6 +24,7 @@ config cache 'cache'
 	option chunk_limit '128M'
 	option dir_cache_time '72h'
 	option attr_timeout '1h'
+	option poll_interval '1m'
 
 config network 'network'
 	option transfers '4'
