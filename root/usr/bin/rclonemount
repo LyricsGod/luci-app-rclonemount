@@ -53,6 +53,8 @@ load_conf() {
 	CHUNK_LIMIT=$(cfg cache chunk_limit "128M")
 	DIR_CACHE=$(cfg cache dir_cache_time "72h")
 	ATTR_TIMEOUT=$(cfg cache attr_timeout "1h")
+	# 缓存巡检间隔。调大可减少日志里的缓存报告频率
+	CACHE_POLL=$(cfg cache poll_interval "1m")
 
 	# --- 并发与重试 ---
 	TRANSFERS=$(cfg network transfers "4")
@@ -205,7 +207,7 @@ do_start() {
 		--vfs-cache-max-size "$CACHE_MAX" \
 		--vfs-cache-min-free-space "$CACHE_MIN_FREE" \
 		--vfs-cache-max-age "$CACHE_MAX_AGE" \
-		--vfs-cache-poll-interval 1m \
+		--vfs-cache-poll-interval "$CACHE_POLL" \
 		--vfs-read-ahead "$READ_AHEAD" \
 		--buffer-size "$BUFFER_SIZE" \
 		--vfs-read-chunk-size "$CHUNK_SIZE" \
