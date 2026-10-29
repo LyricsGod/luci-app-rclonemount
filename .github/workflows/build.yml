@@ -73,17 +73,7 @@ jobs:
         uses: docker://alpine:3.21
         with:
           entrypoint: /bin/sh
-          args: >-
-            -c "sh /github/workspace/.github/build-apk.sh
-            2>&1 | tee /github/workspace/apk-build.log"
-
-      - name: 上传构建日志（便于排查）
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk-build-log
-          path: apk-build.log
-          if-no-files-found: warn
+          args: -c "sh /github/workspace/.github/build-apk.sh"
 
       # 校验在构建脚本内部做（见 .github/build-apk.sh 的 [9]），
       # 这里不单独跑 apk info —— 它会去解析仓库缓存、在容器里报警告并返回非 0，
