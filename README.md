@@ -44,6 +44,26 @@ OpenWrt / iStoreOS 上的 LuCI 网盘挂载管理界面。
 
 ## 安装
 
+### 两种方式怎么选
+
+| 格式 | 适用 | 说明 |
+|---|---|---|
+| **ipk** | OpenWrt 24.10 及更早、iStoreOS（opkg 体系） | 用 `opkg install`，大多数设备现在是这个 |
+| **apk** | OpenWrt 24.10+ 开启 APK 支持、25.x 起默认 | 用 `apk add`，是新格式 |
+
+每个 Release 都同时提供两种，按自己系统的包管理器挑。
+
+> apk 包由官方 `abuild` 在 Alpine 容器里构建，格式标准；
+> 由于是 CI 临时环境构建，没有可信签名，安装时加 `--allow-untrusted`。
+
+```sh
+# opkg 体系
+opkg install luci-app-rclonemount_1.1.0-1_all.ipk
+
+# APK 体系
+apk add --allow-untrusted luci-app-rclonemount-1.1.0-r0.apk
+```
+
 ### 方式一：免编译（推荐先试这个）
 
 把整个目录拷到路由器上，然后：
@@ -84,6 +104,10 @@ luci-app-rclonemount/
 │   ├── controller/rclonemount.lua        # 菜单与动作
 │   ├── model/cbi/rclonemount.lua         # 配置表单
 │   └── view/rclonemount/status.htm       # 状态页
+├── apk/                                  # APK 格式构建材料
+│   ├── APKBUILD                          # abuild 构建脚本（noarch）
+│   ├── luci-app-rclonemount.post-install
+│   └── luci-app-rclonemount.pre-deinstall
 └── root/                                 # → 文件系统根
     ├── etc/
     │   ├── config/rclonemount            # UCI 默认配置
