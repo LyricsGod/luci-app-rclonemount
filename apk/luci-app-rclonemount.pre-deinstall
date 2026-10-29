@@ -1,0 +1,10 @@
+#!/bin/sh
+# abuild 会在卸载/升级前自动执行本脚本
+# （文件名必须叫 <pkgname>.pre-deinstall，abuild 才会打包进去）
+
+set -e
+
+/etc/init.d/rclonemount stop 2>/dev/null || true
+/etc/init.d/rclonemount disable 2>/dev/null || true
+
+exit 0
