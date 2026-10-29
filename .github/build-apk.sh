@@ -21,8 +21,10 @@ echo "==> [1] 安装 abuild"
 apk add --no-cache abuild sudo; echo "    exit=$?"
 
 echo "==> [2] 创建构建用户"
-adduser -D "$BUILDER" 2>&1; echo "    adduser exit=$?"
-addgroup "$BUILDER" "$BUILDER" 2>&1; echo "    addgroup exit=$?"
+# 注意：装完 abuild 后 abuild 组已经存在，必须用 -G 指定它，
+# 否则 adduser 会再去建同名组，报 "group 'abuild' in use"
+addgroup "$BUILDER" 2>/dev/null
+adduser -D -G "$BUILDER" "$BUILDER" 2>&1; echo "    adduser exit=$?"
 
 echo "==> [3] 准备 abuild 配置"
 mkdir -p "/home/$BUILDER/.abuild"
