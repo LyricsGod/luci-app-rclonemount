@@ -1,0 +1,55 @@
+# Maintainer: LyricsGod <https://github.com/LyricsGod>
+#
+# 用 abuild 构建 APK（Alpine/OpenWrt 24.10+ 的新包格式）。
+# 本包为 noarch（纯 Lua + shell，无需交叉编译）。
+#
+# 用法：
+#   cd apk && abuild -F checksum && abuild -F
+# 产物：apk/packages/noarch/luci-app-rclonemount-<ver>-r<rel>.apk
+
+pkgname="luci-app-rclonemount"
+pkgver="1.1.0"
+pkgrel="0"
+pkgdesc="LuCI app to manage rclone network disk mount (Alist/OpenList WebDAV + Jellyfin)"
+url="https://github.com/LyricsGod/luci-app-rclonemount"
+arch="noarch"
+license="MIT"
+depends="rclone luci-base"
+source=""
+# 纯脚本包：不跑测试，也不扫描二进制依赖
+options="!check !tracedeps"
+
+build() {
+	# 没有需要编译的东西
+	return 0
+}
+
+package() {
+	local d="$pkgdir"
+	local src="$startdir/.."
+
+	mkdir -p "$d"/usr/lib/lua/luci/controller \
+		"$d"/usr/lib/lua/luci/model/cbi \
+		"$d"/usr/lib/lua/luci/view/rclonemount \
+		"$d"/usr/bin \
+		"$d"/etc/config \
+		"$d"/etc/init.d \
+		"$d"/etc/uci-defaults
+
+	cp "$src"/luasrc/controller/rclonemount.lua        "$d"/usr/lib/lua/luci/controller/
+	cp "$src"/luasrc/model/cbi/rclonemount.lua         "$d"/usr/lib/lua/luci/model/cbi/
+	cp "$src"/luasrc/view/rclonemount/status.htm       "$d"/usr/lib/lua/luci/view/rclonemount/
+	cp "$src"/root/usr/bin/rclonemount                 "$d"/usr/bin/
+	cp "$src"/root/etc/init.d/rclonemount              "$d"/etc/init.d/
+	cp "$src"/root/etc/uci-defaults/zzz-rclonemount    "$d"/etc/uci-defaults/
+	cp "$src"/root/etc/config/rclonemount              "$d"/etc/config/
+
+	chmod 755 "$d"/usr/bin/rclonemount \
+		"$d"/etc/init.d/rclonemount \
+		"$d"/etc/uci-defaults/zzz-rclonemount
+
+	chmod 644 "$d"/usr/lib/lua/luci/controller/rclonemount.lua \
+		"$d"/usr/lib/lua/luci/model/cbi/rclonemount.lua \
+		"$d"/usr/lib/lua/luci/view/rclonemount/status.htm \
+		"$d"/etc/config/rclonemount
+}
