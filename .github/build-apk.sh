@@ -4,32 +4,48 @@
 # 由 .github/workflows/build.yml 通过 docker://alpine 调用。
 #
 # abuild 不允许以 root 运行，所以这里建一个 abuild 用户再切过去执行。
+# 每步都打印 exit code，方便在 CI 日志里定位问题。
 # ============================================================
-set -e
 
 WORKDIR="${WORKDIR:-/github/workspace}"
 BUILDER="abuild"
 
-echo "==> 安装 abuild"
-apk add --no-cache abuild sudo
+echo "==> [0] 环境"
+echo "    whoami=$(id -un) uid=$(id -u)"
+echo "    workdir=$WORKDIR"
+ls -la "$WORKDIR" 2>&1 | head -5
+echo "    apk/ 内容:"
+ls -la "$WORKDIR/apk" 2>&1 | head -10
 
-echo "==> 准备构建用户"
-adduser -D "$BUILDER" 2>/dev/null || true
-addgroup "$BUILDER" "$BUILDER" 2>/dev/null || true
+echo "==> [1] 安装 abuild"
+apk add --no-cache abuild sudo; echo "    exit=$?"
+
+echo "==> [2] 创建构建用户"
+adduser -D "$BUILDER" 2>&1; echo "    adduser exit=$?"
+addgroup "$BUILDER" "$BUILDER" 2>&1; echo "    addgroup exit=$?"
+
+echo "==> [3] 准备 abuild 配置"
 mkdir -p "/home/$BUILDER/.abuild"
-# 预先写好 PACKAGER，避免 abuild-keygen 交互等待
 echo 'PACKAGER="CI <ci@noreply.local>"' > "/home/$BUILDER/.abuild/abuild.conf"
 echo "$BUILDER ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+cat "/home/$BUILDER/.abuild/abuild.conf"
+echo "    exit=$?"
 
-chown -R "$BUILDER" "/home/$BUILDER"
-# abuild 需要在源码目录里产出 packages/，所以要给它写权限
-chown -R "$BUILDER" "$WORKDIR"
+echo "==> [4] 调整属主"
+chown -R "$BUILDER" "/home/$BUILDER"; echo "    home exit=$?"
+chown -R "$BUILDER" "$WORKDIR"; echo "    workdir exit=$?"
 
-echo "==> 生成临时签名密钥"
-su "$BUILDER" -c "cd $WORKDIR/apk && abuild-keygen -a -n"
+echo "==> [5] 生成签名密钥"
+su "$BUILDER" -c "cd $WORKDIR/apk && abuild-keygen -a -n" 2>&1; echo "    exit=$?"
+ls -la "/home/$BUILDER/.abuild/" 2>&1 | head -5
 
-echo "==> 构建"
-su "$BUILDER" -c "cd $WORKDIR/apk && abuild -F checksum && abuild -F"
+echo "==> [6] 校验 ABUILD 元数据"
+su "$BUILDER" -c "cd $WORKDIR/apk && abuild -F checksum" 2>&1; echo "    exit=$?"
 
-echo "==> 产物"
-find "$WORKDIR/apk/packages" -name '*.apk' -ls
+echo "==> [7] 构建"
+su "$BUILDER" -c "cd $WORKDIR/apk && abuild -F" 2>&1; echo "    exit=$?"
+
+echo "==> [8] 产物"
+find "$WORKDIR" -name '*.apk' 2>/dev/null | head -5
+ls -laR "$WORKDIR/apk/packages" 2>&1 | head -20
+echo "==> 结束"
