@@ -73,7 +73,17 @@ jobs:
         uses: docker://alpine:3.21
         with:
           entrypoint: /bin/sh
-          args: -c "sh /github/workspace/.github/build-apk.sh"
+          args: >-
+            -c "sh /github/workspace/.github/build-apk.sh
+            2>&1 | tee /github/workspace/apk-build.log"
+
+      - name: 上传构建日志（便于排查）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-build-log
+          path: apk-build.log
+          if-no-files-found: warn
 
       - name: 校验 apk 可被 apk-tools 解析
         uses: docker://alpine:3.21
