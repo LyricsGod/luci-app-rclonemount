@@ -85,13 +85,9 @@ jobs:
           path: apk-build.log
           if-no-files-found: warn
 
-      - name: 校验 apk 可被 apk-tools 解析
-        uses: docker://alpine:3.21
-        with:
-          entrypoint: /bin/sh
-          args: >-
-            -c "ls -lh apk/packages/noarch/ &&
-            apk info --allow-untrusted apk/packages/noarch/*.apk"
+      # 校验在构建脚本内部做（见 .github/build-apk.sh 的 [9]），
+      # 这里不单独跑 apk info —— 它会去解析仓库缓存、在容器里报警告并返回非 0，
+      # 反而把本已成功的构建判成失败。
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
@@ -119,7 +115,10 @@ jobs:
       - name: 发布
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          # 只收这两种，避免把调试日志之类的产件也挂上去
+          files: |
+            artifacts/*.ipk
+            artifacts/*.apk
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
