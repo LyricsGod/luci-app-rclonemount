@@ -1,0 +1,18 @@
+#!/bin/sh
+# abuild 会在安装/升级后自动执行本脚本
+# （文件名必须叫 <pkgname>.post-install，abuild 才会打包进去）
+
+set -e
+
+chmod 755 /usr/bin/rclonemount /etc/init.d/rclonemount 2>/dev/null || true
+rm -rf /tmp/luci-indexcache /tmp/luci-modulecache
+
+/etc/init.d/rclonemount enable 2>/dev/null || true
+
+# 升级时 pre-deinstall 会先 stop，这里要负责挂回去，
+# 否则用户升级完发现网盘没了。必须后台执行，否则会卡住包管理器。
+if [ "$(uci -q get rclonemount.main.enabled)" = "1" ]; then
+	(/etc/init.d/rclonemount start >/dev/null 2>&1 &)
+fi
+
+exit 0
