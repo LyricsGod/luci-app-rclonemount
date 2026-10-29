@@ -1,4 +1,6 @@
-# Maintainer: LyricsGod <https://github.com/LyricsGod>
+# Maintainer: LyricsGod <40240230+LyricsGod@users.noreply.github.com>
+# 注意：abuild 校验这行必须是 RFC822 格式（真邮箱地址），
+# 写成 <https://...> 这样的 URL 会直接报 "not a valid rfc822 address" 而构建失败。
 #
 # 用 abuild 构建 APK（Alpine/OpenWrt 24.10+ 的新包格式）。
 # 本包为 noarch（纯 Lua + shell，无需交叉编译）。
