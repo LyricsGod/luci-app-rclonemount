@@ -73,10 +73,7 @@ jobs:
         uses: docker://alpine:3.21
         with:
           entrypoint: /bin/sh
-          args: >-
-            -c "apk add --no-cache abuild &&
-            mkdir -p /root/.abuild &&
-            cd apk && abuild -F checksum && abuild -F"
+          args: -c "sh /github/workspace/.github/build-apk.sh"
 
       - name: 校验 apk 可被 apk-tools 解析
         uses: docker://alpine:3.21
