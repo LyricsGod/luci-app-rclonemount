@@ -74,8 +74,10 @@ done
 echo "==> [9] 校验"
 for f in "$OUT"/*.apk; do
 	[ -f "$f" ] || continue
-	echo "    --- $f ---"
-	apk info --allow-untrusted "$f" 2>&1 | head -12
+	echo "    --- $(basename "$f") ---"
+	# apk info 会去查仓库缓存并在容器里报警告、返回非 0，
+	# 这里用 manifest 直接读包本身，不做仓库解析
+	apk manifest "$f" 2>&1 | head -15
 done
 ls -lh "$OUT" 2>&1 | head -5
 echo "==> 结束"
