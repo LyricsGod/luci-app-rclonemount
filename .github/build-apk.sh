@@ -42,10 +42,13 @@ su "$BUILDER" -c "cd $WORKDIR/apk && abuild-keygen -a -n" 2>&1; echo "    exit=$
 ls -la "/home/$BUILDER/.abuild/" 2>&1 | head -5
 
 echo "==> [6] 校验 ABUILD 元数据"
-su "$BUILDER" -c "cd $WORKDIR/apk && abuild -F checksum" 2>&1; echo "    exit=$?"
+su "$BUILDER" -c "cd $WORKDIR/apk && abuild -F -d checksum" 2>&1; echo "    exit=$?"
 
 echo "==> [7] 构建"
-su "$BUILDER" -c "cd $WORKDIR/apk && abuild -F" 2>&1; echo "    exit=$?"
+# -d 禁用依赖检查：rclone / luci-base 是 OpenWrt 的包，Alpine 仓库里没有，
+# 不跳过的 abuild 会直接报 "Missing dependencies" 而失败。
+# 依赖声明仍会写进包里，装到 OpenWrt 上时照常生效。
+su "$BUILDER" -c "cd $WORKDIR/apk && abuild -F -d" 2>&1; echo "    exit=$?"
 
 echo "==> [8] 产物"
 find "$WORKDIR" -name '*.apk' 2>/dev/null | head -5
